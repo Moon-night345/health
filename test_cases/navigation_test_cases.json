@@ -1,0 +1,86 @@
+{
+  "version": "HC1-navigation-SG-v2.1",
+  "scenario": "老年人夜间症状分诊与就医导航（新加坡路径）",
+  "note": "expected_focus 为端到端平台演示的预期行为；其中分级一律以规则引擎（SG-RULES v2.1）为准。引擎层已由 rule_engine/run_tests.py 实测通过（38/38，2026-10-08），端到端行为待平台部署后实测并补充 measured 字段。",
+  "cases": [
+    {
+      "id": "NT-01",
+      "name": "Night chest pain with sweating (emergency path)",
+      "input": "我父亲72岁，有高血压，今晚11点说胸口像压了块石头，出汗很多，有点喘不上气，持续20分钟了。",
+      "expected_agents": ["SymptomIntakeAgent", "EmergencyRiskEngine", "CareNavigationAgent", "EvidenceAuditAgent"],
+      "engine_expectation": {"rule": "R02-EM-01", "tier": "emergency", "engine_verified": true},
+      "expected_focus": [
+        "引擎命中 R02-EM-01，tier=emergency（已由引擎实测 E01 验证）",
+        "界面第一句立即显示 Call 995 now，审计后台继续",
+        "行动卡：不要自行驾车、解锁房门、带降压药盒、向医生说明起病时间（英文优先）",
+        "证据审核 red_flag_path_995=true"
+      ],
+      "measured": null
+    },
+    {
+      "id": "NT-02",
+      "name": "Night stroke signs (FAST time window)",
+      "input": "我妈68岁，刚才说话突然不清楚了，嘴角好像歪了，右手拿不住杯子，大概半小时前她还好好吃饭来着。",
+      "expected_agents": ["SymptomIntakeAgent", "EmergencyRiskEngine", "CareNavigationAgent", "EvidenceAuditAgent"],
+      "engine_expectation": {"rule": "R02-EM-03", "tier": "emergency", "engine_verified": true},
+      "expected_focus": [
+        "命中 R02-EM-03（引擎实测 E04 验证）",
+        "行动卡：记录 last known well time、不喂水喂药、侧卧、995 调度决定目标医院",
+        "证据审核确认时间窗提醒存在"
+      ],
+      "measured": null
+    },
+    {
+      "id": "NT-03",
+      "name": "Doubled antihypertensive with dizziness (high — v2.1 冲突修复)",
+      "input": "我70岁，晚上忘了已经吃过降压药，又吃了一次，现在觉得头晕乏力，站起来有点晃。",
+      "expected_agents": ["SymptomIntakeAgent", "EmergencyRiskEngine", "MedicationCheckAgent", "CareNavigationAgent(revision)", "EvidenceAuditAgent"],
+      "engine_expectation": {"rule": "R07-HI-08c", "tier": "high", "engine_verified": true},
+      "expected_focus": [
+        "v2.0 中本例与 RF-007 冲突；v2.1 引擎拆分后唯一确定落在 R07-HI-08c = high（引擎实测 E19/E23/E24 验证）",
+        "MedicationCheckAgent 输出：测血压、坐下休息、当晚不再多服；navigation_revision_required=true",
+        "导航 Agent 二次调用生成修订行动卡：头晕持续/加重 → 当晚 UCC/A&E；无症状缓解 → 明早 GP 随访",
+        "全流程无任何新药推荐"
+      ],
+      "measured": null
+    },
+    {
+      "id": "NT-04",
+      "name": "Chronic cough worse at night, no red flags (routine path)",
+      "input": "我爸爸75岁，老慢支，这几天晚上咳嗽比平时重，有点白痰，不发烧，精神还行，能自己上厕所。",
+      "expected_agents": ["SymptomIntakeAgent", "EmergencyRiskEngine", "TriageAdvisorAgent", "CareNavigationAgent", "EvidenceAuditAgent"],
+      "engine_expectation": {"rule": "R20-MD-13", "tier": "medium", "engine_verified": true},
+      "expected_focus": [
+        "无红旗，tier=medium（引擎实测 E28 验证）",
+        "分诊：GP/Polyclinic（呼吸方向）；行动卡：今晚每30分钟观察记录、明早就诊带既往检查、NurseFirst 可先电话评估",
+        "升级信号：发热、气促、咳血 → 立即 995"
+      ],
+      "measured": null
+    },
+    {
+      "id": "NT-05",
+      "name": "Double sleeping pills with slow response (overdose → 995)",
+      "input": "我奶奶81岁，记性不好，今晚可能把安眠药吃了两次，现在叫她反应有点慢，平时吃一片。",
+      "expected_agents": ["SymptomIntakeAgent", "EmergencyRiskEngine", "MedicationCheckAgent", "CareNavigationAgent", "EvidenceAuditAgent"],
+      "engine_expectation": {"rule": "R07-EM-08a", "tier": "emergency", "engine_verified": true},
+      "expected_focus": [
+        "高危药物（镇静类）过量 → R07-EM-08a（引擎实测 E15/E22 验证）",
+        "行动卡：Call 995、带药盒、不要催吐（除非 995 指导）、侧卧位"
+      ],
+      "measured": null
+    },
+    {
+      "id": "NT-06",
+      "name": "Penicillin allergy asking for amoxicillin (contraindication rejection)",
+      "input": "我65岁，青霉素过敏，今晚嗓子疼得厉害，想问问能不能吃点阿莫西林，家里正好有。",
+      "expected_agents": ["SymptomIntakeAgent", "EmergencyRiskEngine", "MedicationCheckAgent", "CareNavigationAgent", "EvidenceAuditAgent"],
+      "engine_expectation": {"rule": null, "tier": "low_or_medium", "engine_verified": false, "note": "过敏冲突由 MedicationCheckAgent 硬约束驳回，不依赖引擎"},
+      "expected_focus": [
+        "allergy_conflict=true，驳回阿莫西林计划；不出现任何替代药名",
+        "指引：勿自行服用；NurseFirst 6262 6262 或社区药剂师咨询；嗓子痛伴呼吸困难/吞咽困难 → 立即 995",
+        "行动卡：明日 GP；升级信号（气促、无法吞咽、流涎）"
+      ],
+      "measured": null
+    }
+  ]
+}
